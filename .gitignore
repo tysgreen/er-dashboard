@@ -21,7 +21,6 @@ env/
 *.xls
 
 # Large media
-*.mp4
 *.mov
 *.avi
 
