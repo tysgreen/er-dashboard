@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hospital ER Intelligence Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Reset & base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242838;
+      --border: #2e3347;
+      --accent: #3b82f6;
+      --accent2: #6366f1;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --radius: 12px;
+    }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #1a1d27 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header .logo { font-size: 28px; }
+    header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    header p  { font-size: 13px; color: var(--text2); }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    .status-label { font-size: 12px; color: var(--text2); }
+
+    /* ── Layout ── */
+    .main { padding: 24px 32px; display: flex; flex-direction: column; gap: 24px; }
+
+    /* ── KPI Cards ── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .kpi-card.blue::before  { background: var(--accent); }
+    .kpi-card.green::before { background: var(--success); }
+    .kpi-card.warn::before  { background: var(--warn); }
+    .kpi-card.red::before   { background: var(--danger); }
+    .kpi-label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+    .kpi-value { font-size: 32px; font-weight: 700; line-height: 1; }
+    .kpi-sub   { font-size: 12px; color: var(--text2); margin-top: 6px; }
+
+    /* ── Alerts Banner ── */
+    #alerts-banner {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.35);
+      border-radius: var(--radius);
+      padding: 14px 20px;
+      display: none;
+    }
+    #alerts-banner .alert-title { font-size: 13px; font-weight: 600; color: var(--danger); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .alert-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .alert-chip {
+      background: rgba(239,68,68,0.2);
+      border: 1px solid rgba(239,68,68,0.4);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: #fca5a5;
+    }
+
+    /* ── Two-col grid ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Panel ── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .panel-title {
+      font-size: 14px; font-weight: 600;
+      color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px;
+      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    /* ── Tabs ── */
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text2);
+      padding: 6px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .tab-btn.query-btn { border-color: var(--accent2); color: var(--accent2); }
+    .tab-btn.query-btn.active { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── Chat ── */
+    #chat-box {
+      height: 420px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 14px;
+      margin-bottom: 16px;
+      padding-right: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .msg { display: flex; flex-direction: column; gap: 4px; max-width: 92%; }
+    .msg.user { align-self: flex-end; align-items: flex-end; }
+    .msg.bot  { align-self: flex-start; }
+    .msg-bubble {
+      border-radius: 14px; padding: 10px 14px; font-size: 14px; line-height: 1.5;
+    }
+    .msg.user .msg-bubble {
+      background: var(--accent); color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .msg.bot .msg-bubble {
+      background: var(--surface2); color: var(--text);
+      border-bottom-left-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    .msg-time { font-size: 11px; color: var(--text2); }
+    .msg-chart-wrap { margin-top: 10px; max-width: 480px; }
+
+    /* thinking animation */
+    .thinking-dots span {
+      display: inline-block; width: 7px; height: 7px;
+      background: var(--text2); border-radius: 50%; margin: 0 2px;
+      animation: blink 1.2s infinite;
+    }
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+    /* ── Input row ── */
+    .input-row { display: flex; gap: 10px; }
+    .input-row input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 11px 16px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .input-row input:focus { border-color: var(--accent); }
+    .input-row button {
+      background: var(--accent);
+      border: none; border-radius: 10px;
+      color: #fff; padding: 11px 20px;
+      font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background 0.2s;
+      white-space: nowrap;
+    }
+    .input-row button:hover { background: #2563eb; }
+    .input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Suggestions ── */
+    .suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .suggestion-chip {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 6px 14px;
+      font-size: 12px; color: var(--text2);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .suggestion-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Chart canvas ── */
+    canvas { max-height: 300px; }
+    #heatmap-canvas { max-height: none; cursor: crosshair; }
+
+    /* ── Heatmap ── */
+    #heatmap-scroll { overflow-x: auto; padding-bottom: 8px; }
+    #heatmap-tooltip {
+      position: fixed;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: var(--text);
+      pointer-events: none;
+      display: none;
+      z-index: 100;
+    }
+    #heatmap-legend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--text2);
+    }
+    #legend-cells { display: flex; gap: 2px; }
+
+    /* ── Query tab placeholder ── */
+    .query-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 260px;
+      color: var(--text2);
+      font-size: 13px;
+      gap: 10px;
+    }
+    .query-placeholder .icon { font-size: 32px; opacity: 0.4; }
+
+    /* ── Patient Table ── */
+    .table-filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+    .table-filters select, .table-filters input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 13px;
+      outline: none;
+    }
+    .table-filters select:focus, .table-filters input:focus { border-color: var(--accent); }
+    .table-filters button {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text2); border-radius: 8px;
+      padding: 7px 14px; font-size: 13px; cursor: pointer;
+    }
+    .table-filters button:hover { border-color: var(--accent); color: var(--accent); }
+
+    .table-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      background: var(--surface2);
+      color: var(--text2); text-transform: uppercase;
+      font-size: 11px; letter-spacing: 0.6px;
+      padding: 10px 12px; position: sticky; top: 0; z-index: 1;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      cursor: pointer;
+      user-select: none;
+    }
+    thead th:hover { color: var(--text); }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td { padding: 9px 12px; color: var(--text); }
+    .badge {
+      display: inline-block; border-radius: 5px; padding: 2px 8px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-danger  { background: rgba(239,68,68,0.2);  color: #fca5a5; }
+    .badge-warn    { background: rgba(245,158,11,0.2); color: #fcd34d; }
+    .badge-success { background: rgba(34,197,94,0.2);  color: #86efac; }
+    .badge-blue    { background: rgba(59,130,246,0.2); color: #93c5fd; }
+    .badge-neutral { background: rgba(148,163,184,0.15); color: #94a3b8; }
+
+    .table-footer { margin-top: 10px; font-size: 12px; color: var(--text2); display: flex; justify-content: space-between; align-items: center; }
+    .pagination { display: flex; gap: 6px; }
+    .pagination button {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text2); border-radius: 6px;
+      padding: 5px 10px; font-size: 12px; cursor: pointer;
+    }
+    .pagination button:disabled { opacity: 0.3; cursor: not-allowed; }
+    .pagination button.active { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🏥</div>
+  <div>
+    <h1>Hospital ER Intelligence</h1>
+    <p>Natural Language Analytics &amp; Live Dashboard</p>
+  </div>
+  <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+    <div class="status-dot" id="api-dot"></div>
+    <span class="status-label" id="api-label">Connecting…</span>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid" id="kpi-grid">
+    <div class="kpi-card blue"><div class="kpi-label">Total Patients</div><div class="kpi-value" id="k-total">—</div><div class="kpi-sub">in dataset</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Avg Wait Time</div><div class="kpi-value" id="k-avg">—</div><div class="kpi-sub">minutes</div></div>
+    <div class="kpi-card warn"><div class="kpi-label">Longest Wait</div><div class="kpi-value" id="k-max">—</div><div class="kpi-sub">minutes</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Waiting &gt;2h</div><div class="kpi-value" id="k-over4h">—</div><div class="kpi-sub" id="k-pct">—% within NHS target</div></div>
+  </div>
+
+  <!-- Alerts Banner -->
+  <div id="alerts-banner">
+    <div class="alert-title">⚠️ Departments exceeding 2.5-hour wait threshold</div>
+    <div class="alert-chips" id="alert-chips"></div>
+  </div>
+
+  <!-- Chat + Tabbed charts -->
+  <div class="two-col">
+
+    <!-- Chat -->
+    <div class="panel" style="display:flex; flex-direction:column;">
+      <div class="panel-title">💬 Natural Language Query</div>
+
+      <div class="suggestions" id="suggestions">
+        <span class="suggestion-chip">Average wait by department?</span>
+        <span class="suggestion-chip">Busiest days of the week?</span>
+        <span class="suggestion-chip">% seen within 4-hour target?</span>
+        <span class="suggestion-chip">Wait time by triage level?</span>
+        <span class="suggestion-chip">Patients admitted by department?</span>
+        <span class="suggestion-chip">Avg cost by insurance type?</span>
+      </div>
+
+      <div id="chat-box"></div>
+
+      <div class="input-row">
+        <input id="q-input" type="text" placeholder="Ask anything about the ER data…" autocomplete="off" />
+        <button id="q-btn" onclick="sendQuery()">Ask ✦</button>
+      </div>
+    </div>
+
+    <!-- Tabbed chart panel -->
+    <div class="panel">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="dept"    onclick="showTab('dept')">Dept Wait</button>
+        <button class="tab-btn"        data-tab="hour"    onclick="showTab('hour')">By Hour</button>
+        <button class="tab-btn"        data-tab="triage"  onclick="showTab('triage')">Triage</button>
+        <button class="tab-btn"        data-tab="dow"     onclick="showTab('dow')">Day of Week</button>
+        <button class="tab-btn"        data-tab="heatmap" onclick="showTab('heatmap')">Calendar</button>
+        <button class="tab-btn query-btn" data-tab="query" id="query-tab-btn" style="display:none" onclick="showTab('query')">Last Query ✦</button>
+      </div>
+
+      <div id="tab-dept"    class="tab-pane active"><canvas id="dept-chart"></canvas></div>
+      <div id="tab-hour"    class="tab-pane"><canvas id="hour-chart"></canvas></div>
+      <div id="tab-triage"  class="tab-pane"><canvas id="triage-chart"></canvas></div>
+      <div id="tab-dow"     class="tab-pane"><canvas id="dow-chart"></canvas></div>
+      <div id="tab-heatmap" class="tab-pane">
+        <div id="heatmap-scroll"><canvas id="heatmap-canvas"></canvas></div>
+        <div id="heatmap-tooltip"></div>
+        <div id="heatmap-legend">
+          <span>Less</span>
+          <div id="legend-cells"></div>
+          <span>More</span>
+        </div>
+      </div>
+      <div id="tab-query" class="tab-pane">
+        <div class="query-placeholder" id="query-placeholder">
+          <div class="icon">✦</div>
+          <div>Ask a question in the chat — charts will appear here</div>
+        </div>
+        <canvas id="query-chart" style="display:none;max-height:280px;"></canvas>
+        <div id="query-table-wrap"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Patient Table -->
+  <div class="panel">
+    <div class="panel-title">🗃️ Patient Records
+      <span id="table-total" style="margin-left:auto; font-size:12px; font-weight:400;"></span>
+    </div>
+
+    <div class="table-filters">
+      <select id="f-dept">
+        <option value="">All Departments</option>
+      </select>
+      <input id="f-min-wait" type="number" placeholder="Min wait (min)" style="width:130px;" />
+      <input id="f-max-wait" type="number" placeholder="Max wait (min)" style="width:130px;" />
+      <select id="f-triage">
+        <option value="">All Triage</option>
+        <option value="1">1 – Critical</option>
+        <option value="2">2 – Emergency</option>
+        <option value="3">3 – Urgent</option>
+        <option value="4">4 – Semi-urgent</option>
+        <option value="5">5 – Non-urgent</option>
+      </select>
+      <select id="f-admitted">
+        <option value="">All</option>
+        <option value="Yes">Admitted</option>
+        <option value="No">Not Admitted</option>
+      </select>
+      <button onclick="applyFilters()">Apply</button>
+      <button onclick="resetFilters()">Reset</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortTable('patient_id')">ID</th>
+            <th onclick="sortTable('date')">Date ↕</th>
+            <th>Name</th>
+            <th onclick="sortTable('patient_gender')">Sex</th>
+            <th onclick="sortTable('patient_age')">Age</th>
+            <th onclick="sortTable('patient_waittime')">Wait (min) ↕</th>
+            <th>Department</th>
+            <th onclick="sortTable('Triage_Level')">Triage</th>
+            <th onclick="sortTable('Admitted')">Admitted</th>
+            <th onclick="sortTable('patient_sat_score')">Sat.</th>
+            <th onclick="sortTable('Clinical_Risk_Score')">Risk</th>
+          </tr>
+        </thead>
+        <tbody id="patient-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="table-footer">
+      <span id="page-info"></span>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+// ── Config ───────────────────────────────────────────────────────────────────
+const API = 'http://localhost:8000';
+let currentPage = 1;
+let totalRows   = 0;
+const PAGE_SIZE = 50;
+let sortCol = 'patient_waittime';
+let sortDir = -1;
+let qIdCounter  = 0;
+let thinkCounter = 0;
+
+// Chart state
+let kpiData    = null;
+let chartsData = null;
+let activeTab  = 'dept';
+let chartInst  = { dept: null, hour: null, triage: null, dow: null, query: null };
+let heatmapLookup    = {};
+let heatmapStartDate = null;
+const HM = { CELL: 11, GAP: 2, STEP: 13, LEFT: 18, TOP: 18 };
+
+const PALETTE = [
+  'rgba(59,130,246,0.85)','rgba(99,102,241,0.85)','rgba(168,85,247,0.85)',
+  'rgba(236,72,153,0.85)','rgba(239,68,68,0.85)','rgba(245,158,11,0.85)',
+  'rgba(34,197,94,0.85)','rgba(20,184,166,0.85)','rgba(14,165,233,0.85)'
+];
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
+  await Promise.all([loadKPIs(), loadAlerts(), loadDepartments(), loadCharts()]);
+  loadPatients();
+  document.getElementById('q-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendQuery();
+  });
+  document.querySelectorAll('.suggestion-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.getElementById('q-input').value = chip.textContent;
+      sendQuery();
+    });
+  });
+}
+
+// ── Status ───────────────────────────────────────────────────────────────────
+function setStatus(online) {
+  const dot   = document.getElementById('api-dot');
+  const label = document.getElementById('api-label');
+  dot.style.background  = online ? 'var(--success)' : 'var(--danger)';
+  dot.style.boxShadow   = online ? '0 0 8px var(--success)' : '0 0 8px var(--danger)';
+  label.textContent     = online ? 'Live' : 'API offline – start backend';
+}
+
+// ── KPIs ─────────────────────────────────────────────────────────────────────
+async function loadKPIs() {
+  try {
+    const r = await fetch(`${API}/kpis`);
+    kpiData = await r.json();
+    document.getElementById('k-total').textContent  = kpiData.total_patients.toLocaleString();
+    document.getElementById('k-avg').textContent    = kpiData.avg_wait_minutes;
+    document.getElementById('k-max').textContent    = kpiData.longest_wait_minutes;
+    document.getElementById('k-over4h').textContent = kpiData.patients_over_4h.toLocaleString();
+    document.getElementById('k-pct').textContent    = `${kpiData.pct_within_4h_target}% within 2h target`;
+    setStatus(true);
+    renderDeptChart();
+  } catch {
+    setStatus(false);
+  }
+}
+
+// ── Alerts ────────────────────────────────────────────────────────────────────
+async function loadAlerts() {
+  try {
+    const r = await fetch(`${API}/alerts`);
+    const d = await r.json();
+    const banner = document.getElementById('alerts-banner');
+    const chips  = document.getElementById('alert-chips');
+    if (d.alerts.length) {
+      banner.style.display = 'block';
+      chips.innerHTML = d.alerts.map(a =>
+        `<span class="alert-chip">${a.department} — ${a.avg_wait_minutes} min</span>`
+      ).join('');
+    }
+  } catch {}
+}
+
+// ── Departments ───────────────────────────────────────────────────────────────
+async function loadDepartments() {
+  try {
+    const r = await fetch(`${API}/departments`);
+    const d = await r.json();
+    const sel = document.getElementById('f-dept');
+    d.departments.forEach(dep => {
+      const opt = document.createElement('option');
+      opt.value = dep; opt.textContent = dep;
+      sel.appendChild(opt);
+    });
+  } catch {}
+}
+
+// ── Load charts data ──────────────────────────────────────────────────────────
+async function loadCharts() {
+  try {
+    const r = await fetch(`${API}/charts`);
+    chartsData = await r.json();
+    if (activeTab !== 'dept') renderTab(activeTab);
+  } catch {}
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function showTab(name) {
+  activeTab = name;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  const btn = document.querySelector(`.tab-btn[data-tab="${name}"]`);
+  if (btn) btn.classList.add('active');
+  const pane = document.getElementById(`tab-${name}`);
+  if (pane) pane.classList.add('active');
+  renderTab(name);
+}
+
+function renderTab(name) {
+  switch (name) {
+    case 'dept':    if (kpiData)    renderDeptChart();    break;
+    case 'hour':    if (chartsData) renderHourChart();    break;
+    case 'triage':  if (chartsData) renderTriageChart();  break;
+    case 'dow':     if (chartsData) renderDowChart();     break;
+    case 'heatmap': if (chartsData) renderHeatmapChart(); break;
+  }
+}
+
+// ── Dept bar chart ────────────────────────────────────────────────────────────
+function renderDeptChart() {
+  if (!kpiData) return;
+  const entries = Object.entries(kpiData.dept_avg_wait).sort((a, b) => b[1] - a[1]);
+  const labels  = entries.map(e => e[0]);
+  const values  = entries.map(e => e[1]);
+  const colors  = values.map(v =>
+    v > 150 ? 'rgba(239,68,68,0.75)' : v > 90 ? 'rgba(245,158,11,0.75)' : 'rgba(59,130,246,0.75)'
+  );
+  const ctx = document.getElementById('dept-chart').getContext('2d');
+  if (chartInst.dept) chartInst.dept.destroy();
+  chartInst.dept = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Avg Wait (min)', data: values, backgroundColor: colors, borderRadius: 5 }] },
+    options: {
+      indexAxis: 'y', responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => ` ${c.raw} min${c.raw > 150 ? ' ⚠️' : ''}` } }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+        y: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+// ── Hour of day chart ─────────────────────────────────────────────────────────
+function renderHourChart() {
+  if (!chartsData) return;
+  const labels = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+  const values = Array.from({ length: 24 }, (_, i) => chartsData.by_hour[String(i)] || 0);
+  const peak   = Math.max(...values);
+  const colors = values.map(v => `rgba(59,130,246,${(0.25 + 0.7 * v / peak).toFixed(2)})`);
+  const ctx = document.getElementById('hour-chart').getContext('2d');
+  if (chartInst.hour) chartInst.hour.destroy();
+  chartInst.hour = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 3 }] },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: 'Patient Arrivals by Hour of Day', color: '#e2e8f0', font: { size: 13 } },
+        tooltip: { callbacks: { label: c => ` ${c.raw} patients` } }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#94a3b8', font: { size: 9 }, maxRotation: 0 } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#94a3b8' } }
+      }
+    }
+  });
+}
+
+// ── Triage donut chart ────────────────────────────────────────────────────────
+function renderTriageChart() {
+  if (!chartsData) return;
+  const entries = Object.entries(chartsData.by_triage).sort((a, b) => a[0].localeCompare(b[0]));
+  const labels  = entries.map(e => e[0]);
+  const values  = entries.map(e => e[1]);
+  const colors  = ['rgba(239,68,68,0.85)','rgba(245,158,11,0.85)','rgba(59,130,246,0.85)','rgba(99,102,241,0.85)','rgba(34,197,94,0.85)'];
+  const ctx = document.getElementById('triage-chart').getContext('2d');
+  if (chartInst.triage) chartInst.triage.destroy();
+  chartInst.triage = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: '#1a1d27', borderWidth: 2, hoverOffset: 10 }] },
+    options: {
+      responsive: true, cutout: '60%',
+      plugins: {
+        legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 }, padding: 10 } },
+        title: { display: true, text: 'Triage Level Breakdown', color: '#e2e8f0', font: { size: 13 } },
+        tooltip: {
+          callbacks: {
+            label: c => {
+              const total = c.dataset.data.reduce((a, b) => a + b, 0);
+              return ` ${c.raw.toLocaleString()} (${((c.raw / total) * 100).toFixed(1)}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// ── Day of week chart ─────────────────────────────────────────────────────────
+function renderDowChart() {
+  if (!chartsData) return;
+  const order  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const values = order.map(d => chartsData.by_dow[d] || 0);
+  const max    = Math.max(...values);
+  const colors = values.map(v => v === max ? 'rgba(99,102,241,0.85)' : 'rgba(59,130,246,0.65)');
+  const ctx = document.getElementById('dow-chart').getContext('2d');
+  if (chartInst.dow) chartInst.dow.destroy();
+  chartInst.dow = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: order, datasets: [{ data: values, backgroundColor: colors, borderRadius: 6 }] },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: 'Patient Volume by Day of Week', color: '#e2e8f0', font: { size: 13 } },
+        tooltip: { callbacks: { label: c => ` ${c.raw.toLocaleString()} patients` } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#94a3b8' } }
+      }
+    }
+  });
+}
+
+// ── Calendar heatmap ──────────────────────────────────────────────────────────
+function hmColor(t) {
+  if (t <= 0) return '#1e2535';
+  const tv = Math.pow(t, 0.55);
+  return `rgb(${Math.round(17+tv*82)},${Math.round(30+tv*72)},${Math.round(50+tv*191)})`;
+}
+
+function renderHeatmapChart() {
+  if (!chartsData || !chartsData.by_date) return;
+  const byDate = chartsData.by_date;
+  const canvas = document.getElementById('heatmap-canvas');
+  if (!canvas) return;
+
+  const { CELL, GAP, STEP, LEFT, TOP } = HM;
+  const dates = Object.keys(byDate).sort();
+  if (!dates.length) return;
+
+  const minD = new Date(dates[0]);
+  const maxD = new Date(dates[dates.length - 1]);
+
+  // Align start to Monday of minD's week
+  const start = new Date(minD);
+  const dow0  = start.getDay();
+  start.setDate(start.getDate() - (dow0 === 0 ? 6 : dow0 - 1));
+
+  const totalDays  = Math.ceil((maxD - start) / 86400000) + 7;
+  const totalWeeks = Math.ceil(totalDays / 7);
+
+  canvas.width  = LEFT + totalWeeks * STEP + 4;
+  canvas.height = TOP + 7 * STEP + 4;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  heatmapLookup    = {};
+  heatmapStartDate = start;
+  Object.entries(byDate).forEach(([d, c]) => { heatmapLookup[d] = c; });
+  const maxCount = Math.max(...Object.values(byDate));
+
+  // Month labels
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '10px Segoe UI';
+  let lastMonth = -1;
+  for (let w = 0; w < totalWeeks; w++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + w * 7);
+    if (d.getMonth() !== lastMonth) {
+      lastMonth = d.getMonth();
+      ctx.fillText(MONTHS[lastMonth], LEFT + w * STEP, 11);
+    }
+  }
+
+  // Day labels
+  ['M','','W','','F','','S'].forEach((lbl, i) => {
+    if (lbl) {
+      ctx.fillStyle = '#64748b';
+      ctx.font = '9px Segoe UI';
+      ctx.fillText(lbl, 2, TOP + i * STEP + CELL - 1);
+    }
+  });
+
+  // Cells
+  for (let w = 0; w < totalWeeks; w++) {
+    for (let d = 0; d < 7; d++) {
+      const cellDate = new Date(start);
+      cellDate.setDate(start.getDate() + w * 7 + d);
+      if (cellDate > maxD) continue;
+      const ds    = cellDate.toISOString().split('T')[0];
+      const count = heatmapLookup[ds] || 0;
+      ctx.fillStyle = hmColor(count / maxCount);
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(LEFT + w * STEP, TOP + d * STEP, CELL, CELL, 2);
+      } else {
+        ctx.rect(LEFT + w * STEP, TOP + d * STEP, CELL, CELL);
+      }
+      ctx.fill();
+    }
+  }
+
+  // Legend
+  const legendEl = document.getElementById('legend-cells');
+  if (legendEl) {
+    legendEl.innerHTML = Array.from({ length: 6 }, (_, i) =>
+      `<div style="width:11px;height:11px;background:${hmColor(i/5)};border-radius:2px;"></div>`
+    ).join('');
+  }
+
+  // Tooltip
+  const tooltip = document.getElementById('heatmap-tooltip');
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const w  = Math.floor((mx - LEFT) / STEP);
+    const d  = Math.floor((my - TOP) / STEP);
+    if (w < 0 || d < 0 || d > 6 || mx < LEFT + w * STEP || mx > LEFT + w * STEP + CELL) {
+      tooltip.style.display = 'none'; return;
+    }
+    const cellDate = new Date(start);
+    cellDate.setDate(start.getDate() + w * 7 + d);
+    if (cellDate > maxD) { tooltip.style.display = 'none'; return; }
+    const ds    = cellDate.toISOString().split('T')[0];
+    const count = heatmapLookup[ds] || 0;
+    const fmt   = cellDate.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+    tooltip.textContent    = `${fmt}: ${count} patients`;
+    tooltip.style.display  = 'block';
+    tooltip.style.left     = (e.clientX + 14) + 'px';
+    tooltip.style.top      = (e.clientY - 32) + 'px';
+  };
+  canvas.onmouseleave = () => { tooltip.style.display = 'none'; };
+}
+
+// ── Update Query tab from chat result ─────────────────────────────────────────
+function updateQueryTab(data) {
+  const btn         = document.getElementById('query-tab-btn');
+  const placeholder = document.getElementById('query-placeholder');
+  const queryCanvas = document.getElementById('query-chart');
+  const tableWrap   = document.getElementById('query-table-wrap');
+
+  btn.style.display = 'inline-block';
+  showTab('query');
+
+  if (chartInst.query) { chartInst.query.destroy(); chartInst.query = null; }
+  queryCanvas.style.display = 'none';
+  queryCanvas.style.maxHeight = '280px';
+  tableWrap.innerHTML = '';
+
+  const d = data.data;
+
+  if (!d || d.type === 'scalar') {
+    placeholder.style.display = 'flex';
+    placeholder.innerHTML = `
+      <div style="font-size:36px;font-weight:700;color:var(--accent);">${d?.value ?? '—'}</div>
+      <div style="color:var(--text2);font-size:13px;">${data.chart_title || ''}</div>`;
+    return;
+  }
+  placeholder.style.display = 'none';
+
+  if (d.type === 'dataframe') {
+    const cols = d.columns.slice(0, 6);
+    const rows = d.rows.slice(0, 30);
+    let html = `<div style="overflow-x:auto;max-height:280px;overflow-y:auto;">
+      <table style="font-size:12px;border-collapse:collapse;width:100%;">
+      <thead><tr>${cols.map(c =>
+        `<th style="padding:6px 10px;background:var(--surface2);color:var(--text2);border-bottom:1px solid var(--border);text-align:left;position:sticky;top:0;">${c}</th>`
+      ).join('')}</tr></thead>
+      <tbody>${rows.map(r =>
+        `<tr style="border-bottom:1px solid var(--border);">${cols.map((_, i) =>
+          `<td style="padding:6px 10px;color:var(--text);">${r[i] ?? '—'}</td>`
+        ).join('')}</tr>`
+      ).join('')}</tbody>
+      </table></div>`;
+    tableWrap.innerHTML = html;
+    return;
+  }
+
+  if (d.type === 'series' && d.labels && d.values) {
+    queryCanvas.style.display = 'block';
+    const type     = data.chart_type === 'pie' ? 'doughnut' : data.chart_type === 'line' ? 'line' : 'bar';
+    const bgColors = d.values.map((_, i) =>
+      type === 'doughnut' ? PALETTE[i % PALETTE.length] : 'rgba(59,130,246,0.75)'
+    );
+    chartInst.query = new Chart(queryCanvas.getContext('2d'), {
+      type,
+      data: {
+        labels: d.labels,
+        datasets: [{
+          label: data.chart_title,
+          data: d.values,
+          backgroundColor: bgColors,
+          borderColor: type === 'line' ? 'rgba(59,130,246,1)' : bgColors,
+          borderWidth: type === 'line' ? 2 : 0,
+          borderRadius: type === 'bar' ? 5 : 0,
+          fill: type === 'line',
+          tension: 0.3,
+          hoverOffset: type === 'doughnut' ? 8 : 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: type === 'doughnut', labels: { color: '#94a3b8', font: { size: 11 } } },
+          title:  { display: !!data.chart_title, text: data.chart_title, color: '#e2e8f0', font: { size: 13 } }
+        },
+        scales: type !== 'doughnut' ? {
+          x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#94a3b8', font: { size: 11 }, maxRotation: 45 } },
+          y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#94a3b8' } }
+        } : {}
+      }
+    });
+  }
+}
+
+// ── Patient table ─────────────────────────────────────────────────────────────
+function buildURL() {
+  const params = new URLSearchParams({ page: currentPage, page_size: PAGE_SIZE });
+  const dept = document.getElementById('f-dept').value;
+  const minW = document.getElementById('f-min-wait').value;
+  const maxW = document.getElementById('f-max-wait').value;
+  const tri  = document.getElementById('f-triage').value;
+  const adm  = document.getElementById('f-admitted').value;
+  if (dept) params.set('department', dept);
+  if (minW) params.set('min_wait', minW);
+  if (maxW) params.set('max_wait', maxW);
+  if (tri)  params.set('triage', tri);
+  if (adm)  params.set('admitted', adm);
+  return `${API}/patients?${params}`;
+}
+
+async function loadPatients() {
+  try {
+    const r = await fetch(buildURL());
+    const d = await r.json();
+    totalRows = d.total;
+    renderTable(d.data);
+    renderPagination(d.total, d.page);
+    document.getElementById('table-total').textContent = `${d.total.toLocaleString()} patients`;
+  } catch {
+    document.getElementById('patient-tbody').innerHTML =
+      `<tr><td colspan="11" style="text-align:center;color:var(--text2);padding:20px;">Backend offline — start the Python server</td></tr>`;
+  }
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('patient-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text2);padding:20px;">No results</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(row => {
+    const wait = row.patient_waittime ?? '—';
+    const waitBadge = wait === '—' ? '—' :
+      wait > 120 ? `<span class="badge badge-danger">${wait}</span>` :
+      wait > 60  ? `<span class="badge badge-warn">${wait}</span>` :
+                   `<span class="badge badge-success">${wait}</span>`;
+    const triageColors = {1:'badge-danger',2:'badge-danger',3:'badge-warn',4:'badge-blue',5:'badge-success'};
+    const triage = row.Triage_Level ?? '—';
+    const triageBadge = triage !== '—' ? `<span class="badge ${triageColors[triage]||'badge-neutral'}">${triage}</span>` : '—';
+    const admitted = row.Admitted ?? '—';
+    const admBadge = admitted === 'Yes' ? `<span class="badge badge-warn">Yes</span>` :
+                     admitted === 'No'  ? `<span class="badge badge-neutral">No</span>` : '—';
+    const sat  = row.patient_sat_score != null ? row.patient_sat_score.toFixed(1) : '—';
+    const risk = row.Clinical_Risk_Score != null ? row.Clinical_Risk_Score.toFixed(1) : '—';
+    const dateStr = row.date ? row.date.substring(0, 16) : '—';
+    return `<tr>
+      <td style="color:var(--text2);font-size:11px;">${row.patient_id || '—'}</td>
+      <td style="font-size:12px;">${dateStr}</td>
+      <td>${(row.patient_first_inital || '') + ' ' + (row.patient_last_name || '')}</td>
+      <td>${row.patient_gender || '—'}</td>
+      <td>${row.patient_age ?? '—'}</td>
+      <td>${waitBadge}</td>
+      <td style="font-size:12px;">${row.department_referral || '—'}</td>
+      <td>${triageBadge}</td>
+      <td>${admBadge}</td>
+      <td>${sat}</td>
+      <td>${risk}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPagination(total, page) {
+  const pages = Math.ceil(total / PAGE_SIZE);
+  document.getElementById('page-info').textContent = `Page ${page} of ${pages} (${total.toLocaleString()} records)`;
+  const pg = document.getElementById('pagination');
+  let html = `<button onclick="goPage(${page-1})" ${page<=1?'disabled':''}>‹</button>`;
+  const start = Math.max(1, page-2), end = Math.min(pages, page+2);
+  for (let i = start; i <= end; i++) {
+    html += `<button onclick="goPage(${i})" class="${i===page?'active':''}">${i}</button>`;
+  }
+  html += `<button onclick="goPage(${page+1})" ${page>=pages?'disabled':''}>›</button>`;
+  pg.innerHTML = html;
+}
+
+function goPage(p)  { currentPage = p; loadPatients(); }
+function applyFilters() { currentPage = 1; loadPatients(); }
+function resetFilters() {
+  ['f-dept','f-triage','f-admitted'].forEach(id => document.getElementById(id).value = '');
+  ['f-min-wait','f-max-wait'].forEach(id => document.getElementById(id).value = '');
+  currentPage = 1; loadPatients();
+}
+function sortTable(col) {
+  if (sortCol === col) sortDir *= -1; else { sortCol = col; sortDir = -1; }
+  loadPatients();
+}
+
+// ── Chat / Query ──────────────────────────────────────────────────────────────
+async function sendQuery() {
+  const input    = document.getElementById('q-input');
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = '';
+  document.getElementById('q-btn').disabled = true;
+
+  appendMessage('user', question);
+  const thinkId = appendThinking();
+
+  try {
+    const r = await fetch(`${API}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question })
+    });
+    removeThinking(thinkId);
+    if (!r.ok) {
+      const err = await r.json();
+      appendMessage('bot', `❌ Error: ${err.detail || 'Unknown error'}`);
+    } else {
+      appendBotResponse(await r.json());
+    }
+  } catch {
+    removeThinking(thinkId);
+    appendMessage('bot', '❌ Could not reach the API. Is the backend running?');
+  }
+  document.getElementById('q-btn').disabled = false;
+}
+
+function appendMessage(role, text) {
+  const box = document.getElementById('chat-box');
+  const now = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.innerHTML = `<div class="msg-bubble">${escapeHtml(text)}</div><div class="msg-time">${now}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+function appendBotResponse(data) {
+  const box = document.getElementById('chat-box');
+  const now = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  const cid = `chart-${++qIdCounter}`;
+
+  const div = document.createElement('div');
+  div.className = 'msg bot';
+  div.innerHTML = `
+    <div class="msg-bubble">${escapeHtml(data.answer)}</div>
+    <div class="msg-chart-wrap" id="${cid}"></div>
+    <div class="msg-time">${now}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+
+  // Small inline chart in chat bubble
+  renderInlineChart(cid, data);
+
+  // Also push chart data to the right-panel query tab
+  if (data.data && (data.data.type === 'series' || data.data.type === 'dataframe')) {
+    updateQueryTab(data);
+  }
+}
+
+function renderInlineChart(containerId, data) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const d = data.data;
+  if (!d || d.type === 'scalar') {
+    if (d && d.value != null)
+      container.innerHTML = `<div style="font-size:28px;font-weight:700;color:var(--accent);margin-top:8px;">${d.value}</div>`;
+    return;
+  }
+  if (d.type === 'dataframe') {
+    const cols = d.columns.slice(0, 5);
+    const rows = d.rows.slice(0, 8);
+    let html = `<div style="margin-top:8px;overflow-x:auto;"><table style="font-size:11px;border-collapse:collapse;width:100%;">`;
+    html += `<thead><tr>${cols.map(c => `<th style="padding:3px 7px;background:var(--surface2);color:var(--text2);border-bottom:1px solid var(--border);">${c}</th>`).join('')}</tr></thead>`;
+    html += `<tbody>${rows.map(r => `<tr>${cols.map((_, i) => `<td style="padding:3px 7px;border-bottom:1px solid var(--border);color:var(--text);">${r[i]??'—'}</td>`).join('')}</tr>`).join('')}</tbody>`;
+    html += `</table><div style="font-size:10px;color:var(--text2);margin-top:4px;">Full result in "Last Query ✦" tab →</div></div>`;
+    container.innerHTML = html;
+    return;
+  }
+  if (d.type === 'series' && d.labels && d.values) {
+    const canvas = document.createElement('canvas');
+    canvas.style.maxHeight = '180px';
+    container.appendChild(canvas);
+    const type     = data.chart_type === 'pie' ? 'doughnut' : data.chart_type === 'line' ? 'line' : 'bar';
+    const bgColors = d.values.map((_, i) =>
+      type === 'doughnut' ? PALETTE[i % PALETTE.length] : 'rgba(59,130,246,0.75)'
+    );
+    new Chart(canvas.getContext('2d'), {
+      type,
+      data: {
+        labels: d.labels,
+        datasets: [{
+          data: d.values, backgroundColor: bgColors,
+          borderColor: type === 'line' ? 'rgba(59,130,246,1)' : bgColors,
+          borderWidth: type === 'line' ? 2 : 0,
+          borderRadius: type === 'bar' ? 4 : 0,
+          fill: type === 'line', tension: 0.3,
+          hoverOffset: type === 'doughnut' ? 6 : 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: type === 'doughnut', labels: { color: '#94a3b8', font: { size: 10 } } },
+          title:  { display: !!data.chart_title, text: data.chart_title, color: '#e2e8f0', font: { size: 12 } }
+        },
+        scales: type !== 'doughnut' ? {
+          x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 45 } },
+          y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+        } : {}
+      }
+    });
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:10px;color:var(--text2);margin-top:4px;';
+    hint.textContent = 'Full chart in "Last Query ✦" tab →';
+    container.appendChild(hint);
+  }
+}
+
+function appendThinking() {
+  const id  = `think-${++thinkCounter}`;
+  const box = document.getElementById('chat-box');
+  const div = document.createElement('div');
+  div.className = 'msg bot'; div.id = id;
+  div.innerHTML = `<div class="msg-bubble thinking-dots"><span></span><span></span><span></span></div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return id;
+}
+function removeThinking(id) { const el = document.getElementById(id); if (el) el.remove(); }
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
