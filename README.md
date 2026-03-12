@@ -2,7 +2,7 @@
 
 A natural-language query interface for Emergency Room analytics, powered by the Anthropic Claude API. Ask plain-English questions about ER data and get instant answers, auto-generated charts, and operational summaries.
 
-▶ **[Click to watch demo video](https://github.com/tysgreen/er-dashboard/blob/main/demo%20video.mp4)**
+📥 **[Download & watch demo video](https://github.com/tysgreen/er-dashboard/blob/main/demo%20video.mp4)** (75MB — click "View raw" to download)
 
 ---
 
